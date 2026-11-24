@@ -70,8 +70,14 @@ sudo rm -f /etc/apt/sources.list.d/steam-stable.list /etc/apt/sources.list.d/ste
 # --- 2. Graphics: Mesa with the Venus Vulkan driver ------------------------------------------------
 say "Installing Mesa (Venus Vulkan driver) and the graphics test tools"
 sudo apt-get update
-"${APT_GET[@]}" install -t trixie-backports \
-  mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libegl-mesa0 vulkan-tools mesa-utils
+# Only the Mesa packages come from trixie-backports ("pkg/trixie-backports"); APT pulls in
+# backports versions of their dependencies only where Mesa requires them. Don't use
+# "-t trixie-backports" here: it makes backports the target release for the whole command, so
+# unrelated dependencies (e.g. libxkbcommon0 via mesa-utils) also move to backports, which later
+# breaks installing other trixie packages that need exact versions of them.
+MESA_BPO=(mesa-vulkan-drivers/trixie-backports libgl1-mesa-dri/trixie-backports
+          libglx-mesa0/trixie-backports libegl-mesa0/trixie-backports)
+"${APT_GET[@]}" install "${MESA_BPO[@]}" vulkan-tools mesa-utils
 
 venus_check() {  # $1: command prefix, $2: label
   local out drv dev
@@ -93,9 +99,11 @@ install_steam_x86_64() {
   sudo dpkg --add-architecture i386
   sudo apt-get update
   say "Installing Steam (Debian contrib) and the 32-bit Mesa drivers"
-  # -t trixie-backports keeps the 32-bit Mesa at the same version as the 64-bit backports Mesa.
-  "${APT_GET[@]}" install -t trixie-backports \
-    steam-installer mesa-vulkan-drivers libglx-mesa0:i386 mesa-vulkan-drivers:i386 libgl1-mesa-dri:i386
+  # The 32-bit Mesa must be the same version as the 64-bit backports Mesa, so take just those
+  # packages from trixie-backports (see the note in step 2 about not using -t).
+  "${APT_GET[@]}" install steam-installer mesa-vulkan-drivers/trixie-backports \
+    libglx-mesa0:i386/trixie-backports mesa-vulkan-drivers:i386/trixie-backports \
+    libgl1-mesa-dri:i386/trixie-backports
 
   # Terminal shells have no D-Bus session bus, which Steam's runtime launcher needs.
   # /usr/local/bin comes before /usr/games in PATH, so "steam" picks up this wrapper.
