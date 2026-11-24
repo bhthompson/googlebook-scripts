@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 # setup-venus-apps.sh
 #
-# Installs Steam and the ArtCraft apps (https://getartcraft.com) in the Android desktop
-# Linux Terminal VM (Debian 13 "trixie"), using Venus (virtio-gpu Vulkan) graphics.
+# Installs Steam in the Android desktop Linux Terminal VM (Debian 13 "trixie"), using Venus
+# (virtio-gpu Vulkan) graphics.
 #
 #   Intel devices (x86_64 VM):     Steam runs natively. It uses Debian's steam-installer from
 #                                  contrib (https://wiki.debian.org/Steam).
 #   Qualcomm devices (aarch64 VM): Steam runs under the FEX-Emu x86 emulator
 #                                  (https://wiki.fex-emu.com/index.php/Steam).
-#   Both:                          ArtCraft Launcher (.deb from GitHub releases). It installs and
-#                                  updates the individual Craft apps as AppImages.
 #
 # Before running this:
 #   - Android build number CL3B.260622.301 or newer (Settings > About device > Build number).
@@ -17,37 +15,29 @@
 #     > Restart Now.
 #
 # Usage (inside the Terminal, as the default user "droid"):
-#   bash setup-venus-apps.sh              # Steam + ArtCraft
-#   bash setup-venus-apps.sh --steam      # Steam only
-#   bash setup-venus-apps.sh --artcraft   # ArtCraft only
+#   bash setup-venus-apps.sh
 # Safe to re-run.
 
-
 set -euo pipefail
-
 
 # Everything runs inside main(), which is only called on the last line. That way bash reads the whole
 # script before running any of it. This matters for "curl ... | bash": a command that reads stdin
 # can't swallow the rest of the script, and a partial download doesn't run partway.
 main() {
 
-
 say()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33mWARNING: %s\033[0m\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
-
-DO_STEAM=0; DO_ARTCRAFT=0
 for a in "$@"; do
   case "$a" in
-    --steam) DO_STEAM=1 ;;
-    --artcraft) DO_ARTCRAFT=1 ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
-    *) die "Unknown option: $a (use --steam and/or --artcraft)" ;;
+    -h|--help)
+      echo "Installs Steam with Venus GPU graphics in the Android desktop Linux Terminal."
+      echo "Usage: bash setup-venus-apps.sh   (no options; safe to re-run)"
+      exit 0 ;;
+    *) die "Unknown option: $a" ;;
   esac
 done
-[ $DO_STEAM = 1 ] || [ $DO_ARTCRAFT = 1 ] || { DO_STEAM=1; DO_ARTCRAFT=1; }
-
 
 [ "$(id -u)" -ne 0 ] || die "Run this as your normal user (droid), not root. It uses sudo where needed."
 . /etc/os-release
@@ -55,7 +45,6 @@ done
 ARCH="$(uname -m)"
 case "$ARCH" in x86_64|aarch64) ;; *) die "Unsupported architecture: $ARCH" ;; esac
 APT_GET=(sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confold)
-
 
 # --- 1. APT sources: contrib/non-free (for steam-installer) and trixie-backports (for Mesa) -------
 say "Checking APT sources (contrib, non-free, trixie-backports)"
@@ -78,13 +67,11 @@ fi
 # Only Debian's Steam packages are used. Drop Valve's repo if an older steam.deb added it.
 sudo rm -f /etc/apt/sources.list.d/steam-stable.list /etc/apt/sources.list.d/steam-beta.list
 
-
 # --- 2. Graphics: Mesa with the Venus Vulkan driver ------------------------------------------------
 say "Installing Mesa (Venus Vulkan driver) and the graphics test tools"
 sudo apt-get update
 "${APT_GET[@]}" install -t trixie-backports \
   mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libegl-mesa0 vulkan-tools mesa-utils
-
 
 venus_check() {  # $1: command prefix, $2: label
   local out drv dev
@@ -100,7 +87,6 @@ venus_check() {  # $1: command prefix, $2: label
 }
 venus_check "bash -c" "Native"
 
-
 # --- 3. Steam ------------------------------------------------------------------------------------
 install_steam_x86_64() {
   say "Enabling 32-bit (i386) packages"
@@ -110,7 +96,6 @@ install_steam_x86_64() {
   # -t trixie-backports keeps the 32-bit Mesa at the same version as the 64-bit backports Mesa.
   "${APT_GET[@]}" install -t trixie-backports \
     steam-installer mesa-vulkan-drivers libglx-mesa0:i386 mesa-vulkan-drivers:i386 libgl1-mesa-dri:i386
-
 
   # Terminal shells have no D-Bus session bus, which Steam's runtime launcher needs.
   # /usr/local/bin comes before /usr/games in PATH, so "steam" picks up this wrapper.
@@ -124,7 +109,6 @@ exec /usr/games/steam "$@"
 EOF
   sudo chmod 0755 /usr/local/bin/steam
 }
-
 
 install_steam_aarch64() {
   # FEX-Emu runs x86/x86-64 Linux programs on arm64. Debian has no FEX package, so use the
@@ -140,7 +124,6 @@ install_steam_aarch64() {
     FEXPKG=fex-emu-armv8.0
   fi
 
-
   say "Installing FEX-Emu ($FEXPKG) from the FEX-Emu PPA"
   sudo install -d -m 0755 /etc/apt/keyrings
   if [ ! -s /etc/apt/keyrings/fex-emu.asc ]; then
@@ -155,7 +138,6 @@ install_steam_aarch64() {
   fi
   sudo apt-get update
   "${APT_GET[@]}" install "$FEXPKG" erofs-utils erofsfuse
-
 
   local ROOTFS_NAME=Ubuntu_24_04
   local ROOTFS="$HOME/.local/share/fex-emu/RootFS/$ROOTFS_NAME"
@@ -175,7 +157,6 @@ install_steam_aarch64() {
   [ "$(FEXBash -c 'uname -m' 2>/dev/null)" = x86_64 ] \
     || die "FEX can't run x86-64 programs (check $FEXCFG and $ROOTFS)"
 
-
   # FEX looks up paths in its RootFS before the real filesystem. Steam and Proton sometimes create
   # a mostly empty $ROOTFS/home/droid/.steam tree, which then hides the real ~/.steam. Steam then
   # fails with "pv-adverb: ... steamrt64/steam (No such file or directory)", and Proton games fail
@@ -191,7 +172,6 @@ install_steam_aarch64() {
     mkdir -p "$ROOTFS/home"
     sudo mount --bind /home "$ROOTFS/home"
   fi
-
 
   say "Unpacking Debian's steam-installer (amd64, contrib) into the FEX RootFS"
   # Use a private APT state, so the system doesn't need amd64 added as a foreign architecture.
@@ -214,7 +194,6 @@ EOF
   dpkg-deb -x "$T"/steam-installer_*_amd64.deb "$T/x"
   cp -a "$T/x/usr/." "$ROOTFS/usr/"
   rm -rf "$T"
-
 
   sudo tee /usr/local/bin/steam-fex >/dev/null <<'EOF'
 #!/bin/sh
@@ -239,60 +218,22 @@ EOF
   # Same command on both architectures.
   sudo ln -sf steam-fex /usr/local/bin/steam
 
-
   venus_check "FEXBash -c" "x86-64 (FEX)"
 }
 
+"install_steam_$ARCH"
 
-if [ $DO_STEAM = 1 ]; then
-  "install_steam_$ARCH"
-fi
-
-
-# --- 4. ArtCraft Launcher ------------------------------------------------------------------------
-install_artcraft() {
-  say "Installing the ArtCraft Launcher"
-  # fuse3 lets the launcher's AppImages mount themselves.
-  "${APT_GET[@]}" install fuse3 curl ca-certificates
-  local api tag url sums dir
-  api="$(curl -fsSL https://api.github.com/repos/storytold/craft-launcher/releases/latest || true)"
-  url="$(grep -oE "https://[^\"]*/artcraft-launcher-[0-9.]+-linux-$ARCH\.deb" <<<"$api" | head -1 || true)"
-  if [ -z "$url" ]; then
-    warn "Couldn't look up the latest ArtCraft Launcher release; using v0.19.2."
-    url="https://github.com/storytold/craft-launcher/releases/download/v0.19.2/artcraft-launcher-0.19.2-linux-$ARCH.deb"
-  fi
-  sums="${url%/*}/SHA256SUMS.txt"
-  dir="$HOME/.cache/artcraft-setup"; mkdir -p "$dir"
-  (cd "$dir" && curl -fsSLO "$url" && curl -fsSLO "$sums" \
-     && sha256sum -c --ignore-missing SHA256SUMS.txt) || die "ArtCraft Launcher download or checksum failed"
-  "${APT_GET[@]}" install "$dir/${url##*/}"
-}
-
-
-if [ $DO_ARTCRAFT = 1 ]; then
-  install_artcraft
-fi
-
-
-# --- 5. Done -------------------------------------------------------------------------------------
+# --- 4. Done -------------------------------------------------------------------------------------
 say "Done"
 echo
-echo "GUI apps open in the Terminal's display view: tap the monitor icon next to ⋮ in the toolbar."
-if [ $DO_STEAM = 1 ]; then
-  echo
-  echo "Start Steam:      steam"
-  echo "  First run: click \"Install\" in the \"Steam installer\" dialog. Steam then downloads its"
-  echo "  client (about 1 GB) and shows the sign-in window."
-  [ "$ARCH" = aarch64 ] && echo "  On Qualcomm devices Steam runs under FEX, so the first start takes several minutes."
-fi
-if [ $DO_ARTCRAFT = 1 ]; then
-  echo
-  echo "Start ArtCraft:   artcraft-launcher"
-  echo "  Click \"Install\" on the apps you want, then \"Open\"."
-  echo "  Installed apps go to ~/Applications and also start from the terminal, e.g."
-  echo "  ~/Applications/photocraft-*.AppImage"
+echo "Start Steam with:   steam"
+echo
+echo "The Steam window opens in the Terminal's display view: tap the monitor icon next to ⋮ in the"
+echo "toolbar. On the first run, click \"Install\" in the \"Steam installer\" dialog. Steam then"
+echo "downloads its client (about 1 GB) and shows the sign-in window."
+if [ "$ARCH" = aarch64 ]; then
+  echo "On Qualcomm devices Steam runs under FEX, so the first start takes several minutes."
 fi
 }
-
 
 main "$@"
